@@ -3,6 +3,7 @@
 #include "debug_utils.h"
 #include "widgets/clock_widget.h"
 #include "hooks/reading_view.h"
+#include "adapters/reading_view.h"
 
 #include <QWidget>
 #include <QString>
@@ -46,6 +47,10 @@ int tweaksInit() {
         nickelClockFailsafe.remove();
     }
 
+    // Migrate settings
+    TweaksSettings* tweaksSettings = new TweaksSettings();
+    tweaksSettings->migrate();
+
     return 0;
 }
 
@@ -61,7 +66,7 @@ struct nh_hook TweaksHook[] = {
         .sym_new  = "hook_ReadingView_constructor",
         .lib      = "libnickel.so.1.0.0",
         .out      = nh_symoutptr(ReadingView_constructor),
-        .desc     = "ReadingView",
+        .desc     = "ReadingView::constructor()",
         .optional = true,
     },
     {
@@ -69,7 +74,31 @@ struct nh_hook TweaksHook[] = {
         .sym_new  = "hook_ReadingFooter_setFooterMargin",
         .lib      = "libnickel.so.1.0.0",
         .out      = nh_symoutptr(ReadingFooter_setFooterMargin),
-        .desc     = "ReadingView",
+        .desc     = "ReadingView::setFooterMargin()",
+        .optional = true,
+    },
+    {
+        .sym      = "_ZN15ReadingSettings19getBookProgressTypeEv",
+        .sym_new  = "hook_ReadingSettings_getBookProgressType",
+        .lib      = "libnickel.so.1.0.0",
+        .out      = nh_symoutptr(ReadingSettings_getBookProgressType),
+        .desc     = "ReadingSettings::getBookProgressType()",
+        .optional = true,
+    },
+    {
+        .sym      = "_ZN15ReadingSettings22getChapterProgressTypeEv",
+        .sym_new  = "hook_ReadingSettings_getChapterProgressType",
+        .lib      = "libnickel.so.1.0.0",
+        .out      = nh_symoutptr(ReadingSettings_getChapterProgressType),
+        .desc     = "ReadingSettings::getChapterProgressType()",
+        .optional = true,
+    },
+    {
+        .sym      = "_ZN21BrightnessEventFilter22updateBrightnessHeaderERK7QStringS2_",
+        .sym_new  = "hook_BrightnessEventFilter_updateBrightnessHeader",
+        .lib      = "libnickel.so.1.0.0",
+        .out      = nh_symoutptr(BrightnessEventFilter_updateBrightnessHeader),
+        .desc     = "BrightnessEventFilter::updateBrightnessHeader()",
         .optional = true,
     },
     {
@@ -77,7 +106,7 @@ struct nh_hook TweaksHook[] = {
         .sym_new  = "hook_SearchAutoCompleteController_handleSpecialCommands",
         .lib      = "libnickel.so.1.0.0",
         .out      = nh_symoutptr(SearchAutoCompleteController_handleSpecialCommands),
-        .desc     = "ReadingView",
+        .desc     = "SearchAutoCompleteController::handleSpecialCommands()",
         .optional = true,
     },
     {
@@ -85,7 +114,7 @@ struct nh_hook TweaksHook[] = {
         .sym_new  = "hook_DogEarDelegate_constructor",
         .lib      = "libnickel.so.1.0.0",
         .out      = nh_symoutptr(DogEarDelegate_constructor),
-        .desc     = "DogEar KEPUB",
+        .desc     = "DogEarDelegate::constructor()",
         .optional = true,
     },
     {
@@ -100,6 +129,85 @@ struct nh_hook TweaksHook[] = {
 };
 
 struct nh_dlsym TweaksDlsym[] = {
+    {
+        .name     = "_ZNK7Content8getTitleEv",
+        .out      = nh_symoutptr(Content_getTitle),
+        .desc     = "Content::getTitle()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView15getChapterTitleEv",
+        .out      = nh_symoutptr(ReadingView_getChapterTitle),
+        .desc     = "ReadingView::getChapterTitle()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView18chapterCurrentPageEv",
+        .out      = nh_symoutptr(ReadingView_chapterCurrentPage),
+        .desc     = "ReadingView::chapterCurrentPage()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView17chapterTotalPagesEv",
+        .out      = nh_symoutptr(ReadingView_chapterTotalPages),
+        .desc     = "ReadingView::chapterTotalPages()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView19fullBookCurrentPageEv",
+        .out      = nh_symoutptr(ReadingView_fullBookCurrentPage),
+        .desc     = "ReadingView::fullBookCurrentPage()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView18fullBookTotalPagesEv",
+        .out      = nh_symoutptr(ReadingView_fullBookTotalPages),
+        .desc     = "ReadingView::fullBookTotalPages()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView20hasValidReadingStatsEv",
+        .out      = nh_symoutptr(ReadingView_hasValidReadingStats),
+        .desc     = "ReadingView::hasValidReadingStats()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView12readingStatsEv",
+        .out      = nh_symoutptr(ReadingView_readingStats),
+        .desc     = "ReadingView::readingStats()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN11ReadingView25getCalculatedReadProgressEv",
+        .out      = nh_symoutptr(ReadingView_getCalculatedReadProgress),
+        .desc     = "ReadingView::getCalculatedReadProgress()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZNK12ReadingStats22currentChapterEstimateEv",
+        .out      = nh_symoutptr(ReadingStats_currentChapterEstimate),
+        .desc     = "ReadingStats::currentChapterEstimate()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZNK12ReadingStats22currentChapterEstimateEv",
+        .out      = nh_symoutptr(ReadingStats_currentChapterEstimate),
+        .desc     = "ReadingStats::currentChapterEstimate()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZNK12ReadingStats18restOfBookEstimateEv",
+        .out      = nh_symoutptr(ReadingStats_restOfBookEstimate),
+        .desc     = "ReadingStats::restOfBookEstimate()",
+        .optional = true,
+    },
+    {
+        .name     = "_ZN12ReadingStatsD1Ev",
+        .out      = nh_symoutptr(ReadingStats_deconstructor),
+        .desc     = "ReadingStats::deconstructor()",
+        .optional = true,
+    },
+
     {
         .name = "_ZN15HardwareFactory14sharedInstanceEv",
         .out  = nh_symoutptr(HardwareFactory_sharedInstance),
@@ -127,6 +235,14 @@ struct nh_dlsym TweaksDlsym[] = {
         .desc     = "ConfirmationDialogFactory::showOKDialog()",
         .optional = true,
     },
+    {
+		.name = "_ZN20MainWindowController14sharedInstanceEv",
+		.out  = nh_symoutptr(MainWindowController_sharedInstance),
+	},
+	{
+		.name = "_ZNK20MainWindowController11currentViewEv",
+		.out  = nh_symoutptr(MainWindowController_currentView),
+	},
 
     {0},
 };
@@ -146,10 +262,14 @@ void hook_ReadingView_constructor(ReadingView* self) {
 
     if (hasNickelClock && ConfirmationDialogFactory_showOKDialog) {
         // Show a dialog prompting the user to reboot their device
-        auto readerDoneLoadingAdapter = new ReadingViewHook::ReaderDoneLoadingAdapter(self);
-        QObject::connect(readerDoneLoadingAdapter, &ReadingViewHook::ReaderDoneLoadingAdapter::readerDoneLoading, []() {
+        auto readerDoneLoadingAdapter = new ReadingViewAdapter::ReaderDoneLoading(self);
+        QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, self, []() {
             ConfirmationDialogFactory_showOKDialog(QStringLiteral("Kobo Tweaks"), QStringLiteral("NickelClock has been successfully uninstalled.<br>Please restart the device to complete the process."));
         });
+    }
+
+    if (QFile::exists(QStringLiteral(DATA_DIR "/debug"))) {
+        QTimer::singleShot(2000, self, [self] { DebugUtils::dumpWidgetToFile(QString("/mnt/onboard/_ReadingView.log"), self); });
     }
 }
 
@@ -172,6 +292,24 @@ void hook_SearchAutoCompleteController_handleSpecialCommands(SearchAutoCompleteC
 
     SearchAutoCompleteController_handleSpecialCommands(self, command);
 }
+
+extern "C" __attribute__((visibility("default")))
+int hook_ReadingSettings_getChapterProgressType(ReadingSettings*) {
+    // always hide header
+    return 0;
+}
+
+extern "C" __attribute__((visibility("default")))
+int hook_ReadingSettings_getBookProgressType(ReadingSettings*) {
+    // always hide footer
+    return 0;
+}
+
+extern "C" __attribute__((visibility("default")))
+void hook_BrightnessEventFilter_updateBrightnessHeader(BrightnessEventFilter* self, const QString& text, const QString& sth) {
+    // BrightnessEventFilter_updateBrightnessHeader(self, text, sth);
+    ReadingViewHook::BrightnessEventFilterHook::updateBrightnessHeader(self, text, sth);
+};
 
 // libadobe
 extern "C" __attribute__((visibility("default")))

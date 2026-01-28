@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "widgets/separator_label.h"
 
 #include <QFile>
 #include <QTextStream>
@@ -6,6 +7,8 @@
 #include <QVector>
 #include <QPair>
 #include <QRegularExpression>
+#include <QWidget>
+#include <QLayout>
 
 static const int qssMetaReg = qRegisterMetaType<QssPropertyFunc>();
 
@@ -120,6 +123,16 @@ namespace Qss {
 
         return result;
     }
+
+    QString scaleValue(const QString& property, const QString& value, int scale) {
+        bool ok;
+        int rawNumber = QString(value).replace(QStringLiteral("px"), "").toInt(&ok);
+        if (ok) {
+            return QStringLiteral("%1:%2px;").arg(property).arg(rawNumber * qMax(0, scale) / 100);
+        }
+
+        return QStringLiteral("%1:%2;").arg(property).arg(value);
+    }
 }
 
 namespace Utils {
@@ -143,5 +156,60 @@ namespace Utils {
         }
 
         return out;
+    }
+}
+
+namespace WidgetUtils {
+    void syncSeparatorVisibility(QWidget* widget) {
+        QWidget* parentWidget = widget->parentWidget();
+        QLayout* parentLayout = parentWidget ? parentWidget->layout() : nullptr;
+        if (!parentLayout) {
+            return;
+        }
+
+        int widgetsCount = parentLayout->count();
+        if (widgetsCount < 3) {
+            // Count < 3 => no separator
+            return;
+        }
+
+        int index = parentLayout->indexOf(widget);
+        if (index == -1) {
+            return;
+        }
+
+        int targetIndex;
+        if (index == 0) {
+            // at the beginning -> find separator on the right side
+            targetIndex = index + 1;
+        } else {
+            // in the middle or at the end -> find separator on the left side
+            targetIndex = index - 1;
+        }
+
+        if (targetIndex < 0 || targetIndex >= widgetsCount) {
+            return;
+        }
+
+        QLayoutItem* item = parentLayout->itemAt(targetIndex);
+        if (auto* separator = qobject_cast<TwSeparatorLabel*>(item->widget())) {
+            bool thisVisible = !widget->isHidden();
+
+            if (index == 0) {
+                // When current widget is at the beginning, its separator has two owners
+                // Get the widget after separator
+                QLayoutItem* otherItem = parentLayout->itemAt(2);
+                auto* otherWidget = qobject_cast<QWidget*>(otherItem->widget());
+                // Separator is visible only when both widgets are visible
+                if (otherWidget) {
+                    bool otherVisible = !otherWidget->isHidden();
+                    separator->setVisible(thisVisible && otherVisible);
+                } else {
+                    separator->setVisible(thisVisible);
+                }
+            } else {
+                separator->setVisible(thisVisible);
+            }
+        }
     }
 }

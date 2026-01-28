@@ -1,149 +1,14 @@
 #include "reading_view.h"
+#include "../adapters/reading_view.h"
+
+#include <QHBoxLayout>
 
 namespace ReadingViewHook {
     static TweaksSettings settings;
     static bool isDarkMode = false;
     static int originalContentsMargins = 0;
 
-    PageChangedAdapter::PageChangedAdapter(ReadingView *parent) : QObject(parent) {
-        if (!QObject::connect(parent, SIGNAL(pageChanged(int)), this, SLOT(notifyPageChanged()), Qt::UniqueConnection)) {
-            nh_log("failed to connect _ZN11ReadingView11pageChangedEi");
-        }
-    }
-
-    void PageChangedAdapter::notifyPageChanged() {
-        // nh_log("page changed");
-        pageChanged();
-    }
-
-    ReaderDoneLoadingAdapter::ReaderDoneLoadingAdapter(ReadingView *parent) : QObject(parent) {
-        if (!QObject::connect(parent, SIGNAL(readerDoneLoading()), this, SLOT(notifyReaderDoneLoading()), Qt::UniqueConnection)) {
-            nh_log("failed to connect _ZN11ReadingView17readerDoneLoadingEv");
-        }
-    }
-
-    void ReaderDoneLoadingAdapter::notifyReaderDoneLoading() {
-        // nh_log("readerDoneLoading");
-        readerDoneLoading();
-    }
-
-    DarkModeAdapter::DarkModeAdapter(GestureReceivingContainer *parent, ReadingView *view) : QObject(parent) {
-        if (!QObject::connect(view, SIGNAL(darkModeChangedSignal()), this, SLOT(notifyDarkModeChanged()), Qt::UniqueConnection)) {
-            nh_log("failed to connect _ZN11ReadingView21darkModeChangedSignalEv");
-        }
-    }
-
-    bool DarkModeAdapter::getDarkMode() {
-        // the property is set by ReadingView by ReadingView::darkModeChanged
-        // (which calls darkModeChangedSignal afterwards) on the
-        // GestureReceivingContainer set up in Ui_ReadingView::setupUi called by
-        // the constructor
-
-        // if this is no longer viable, we could also call
-        // ReadingSettings::getDarkMode, but this won't handle the cases where
-        // ReadingView doesn't support dark mode for the current format (e.g.,
-        // audiobooks)
-
-        // it's also stored as a field on ReadingView, but that would require
-        // hardcoding offsets
-
-        auto prop = parent()->property("darkMode");
-        if (!prop.isValid()) {
-            nh_log("darkMode property not set on GestureReceivingContainer");
-            return false;
-        }
-        return prop.toBool();
-    }
-
-    void DarkModeAdapter::notifyDarkModeChanged() {
-        auto dark = getDarkMode();
-        nh_log("dark mode changed (%s)", dark ? "dark" : "light");
-        darkModeChanged(dark);
-    }
-
-
-    static void insertWidgets(PageChangedAdapter *pageChangedAdapter, DarkModeAdapter *darkModeAdapter, ReadingFooter* parent, QString qss, WidgetTypeEnum leftType, WidgetTypeEnum rightType) {
-        auto readingSettings = settings.getReadingSettings();
-        HardwareInterface* hardwareInterface = HardwareFactory_sharedInstance();
-
-        parent->setStyleSheet(qss);
-        parent->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred); // stretch
-
-        // TODO: make spacing configurable
-        static int spacing = 20;
-        QHBoxLayout* parentLayout = qobject_cast<QHBoxLayout*>(parent->layout());
-        parentLayout->setSpacing(spacing);
-
-        bool isLeft = true;
-        for (auto p : {leftType, rightType}) {
-            QWidget* widget = nullptr;
-
-            switch (p) {
-                case WidgetTypeEnum::Clock:
-                    {
-                        TwClockWidgetConfig config {};
-                        config.isLeft = isLeft;
-                        config.is24hFormat = readingSettings.widgetClock24hFormat;
-
-                        auto clock = new TwClockWidget(config);
-                        QObject::connect(pageChangedAdapter, &PageChangedAdapter::pageChanged, clock, &TwClockWidget::updateTime, Qt::UniqueConnection);
-                        widget = clock;
-                    }
-                    break;
-                case WidgetTypeEnum::Battery:
-                    {
-                        TwBatteryWidgetConfig config {};
-                        config.isDarkMode = darkModeAdapter->getDarkMode();
-                        config.isLeft = isLeft;
-                        config.defaultStyle = readingSettings.widgetBatteryStyle;
-                        config.chargingStyle = readingSettings.widgetBatteryStyleCharging;
-                        config.showWhenBelow = readingSettings.widgetBatteryShowWhenBelow;
-
-                        auto battery = new TwBatteryWidget(config, hardwareInterface);
-                        QObject::connect(darkModeAdapter, &DarkModeAdapter::darkModeChanged, battery, &TwBatteryWidget::setDarkMode, Qt::UniqueConnection);
-                        QObject::connect(pageChangedAdapter, &PageChangedAdapter::pageChanged, battery, &TwBatteryWidget::updateLevel, Qt::UniqueConnection);
-                        widget = battery;
-                    }
-                    break;
-                default:
-                    break;
-            }
-
-            // Setup Widgets container
-            QWidget* container = new QWidget;
-            // Set container's width to the original margin value
-            container->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
-            container->setMinimumWidth(originalContentsMargins);
-
-            // Setup Widgets container's layout
-            QHBoxLayout* containerLayout = new QHBoxLayout(container);
-            containerLayout->setContentsMargins(0, 0, 0, 0);
-            containerLayout->setSpacing(spacing);
-
-            // Add widget to container
-            if (widget) {
-                widget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding);
-                widget->setContentsMargins(0, 0, 0, 0);
-                containerLayout->addWidget(widget, 0);
-            }
-
-            // Insert widgets container into parent layout
-            if (isLeft) {
-                // Insert left
-                container->setContentsMargins(readingSettings.headerFooterMargins, 0, 0, 0);
-                parentLayout->insertWidget(0, container, 0, Qt::AlignLeft);
-            } else {
-                // Insert right
-                container->setContentsMargins(0, 0, readingSettings.headerFooterMargins, 0);
-                parentLayout->addWidget(container, 0, Qt::AlignRight);
-            }
-
-            isLeft = false;
-        }
-
-        // Stretch center widget
-        parentLayout->setStretch(1, 1);
-    }
+    QString contentTitle;
 
     void constructor(ReadingView* view) {
         // Must parse settings before constructor since other widgets use them
@@ -161,35 +26,101 @@ namespace ReadingViewHook {
             return;
         }
 
-        // Find "header"
-        QWidget* header = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("header"), Qt::FindDirectChildrenOnly);
-        QWidget* footer = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("footer"), Qt::FindDirectChildrenOnly);
-        if (!header || !footer) {
-            nh_log("could not find \"header/footer\"");
+        // Find topSpacer/bottomSpacer
+        QWidget* topSpacer = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("topSpacer"), Qt::FindDirectChildrenOnly);
+        QWidget* bottomSpacer = gestureContainer->findChild<ReadingFooter*>(QStringLiteral("bottomSpacer"), Qt::FindDirectChildrenOnly);
+        if (!topSpacer || !bottomSpacer) {
+            nh_log("could not find \"topSpacer/bottomSpacer\"");
             return;
         }
 
-        // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
-        auto pageChangedAdapter = new PageChangedAdapter(view);
-        auto darkModeAdapter = new DarkModeAdapter(gestureContainer, view);
-
+        // Update QSS
         auto readingSettings = settings.getReadingSettings();
+        QString rootQss = view->styleSheet();
 
+        // Adjust topSpacer & bottomSpacer's heights
+        bool emptyHeader = readingSettings.widgetHeaderLeft.isEmpty() && readingSettings.widgetHeaderCenter.isEmpty() && readingSettings.widgetHeaderRight.isEmpty();
+        bool emptyFooter = readingSettings.widgetFooterLeft.isEmpty() && readingSettings.widgetFooterCenter.isEmpty() && readingSettings.widgetFooterRight.isEmpty();
+
+        // Set heights of topSpacer and bottomSpacer
+        if (emptyHeader) {
+            rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#topSpacer"), readingSettings.headerSpacerHeight);
+        } else {
+            rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#topSpacer"));
+        }
+
+        if (emptyFooter) {
+            rootQss = Patch::ReadingView::setFixedHeight(rootQss, QStringLiteral("#bottomSpacer"), readingSettings.footerSpacerHeight);
+        } else {
+            rootQss = Patch::ReadingView::resetHeight(rootQss, QStringLiteral("#bottomSpacer"));
+        }
+
+        rootQss = Patch::ReadingView::addBrightnessLabelQss(rootQss);
+        view->setStyleSheet(rootQss);
+
+        // These adapters abstract the logic and ensure that the update methods on the widgets aren't called after either the widget or the ReadingView has been destroyed
+        auto renderVolumeAdapter = new ReadingViewAdapter::RenderVolume(view);
+        QObject::connect(renderVolumeAdapter, &ReadingViewAdapter::RenderVolume::renderVolume, view, [](const Volume& volume) {
+            Content_getTitle(&contentTitle, &volume);
+        });
+
+        auto darkModeAdapter = new ReadingViewAdapter::DarkMode(gestureContainer, view);
         isDarkMode = darkModeAdapter->getDarkMode();
-
-        QObject::connect(darkModeAdapter, &DarkModeAdapter::darkModeChanged, [](bool dark) {
+        QObject::connect(darkModeAdapter, &ReadingViewAdapter::DarkMode::darkModeChanged, view, [](bool dark) {
             isDarkMode = dark;
         });
 
-        QString readingFooterQss = Qss::getContent(QStringLiteral(":/qss/ReadingFooter.qss"));
-        QString patchedQss = Qss::copySelectors(readingFooterQss, QStringLiteral("#caption"), QStringList() << QStringLiteral("#twks_clock #label") << QStringLiteral("#twks_battery #label"));
+        auto readerDoneLoadingAdapter = new ReadingViewAdapter::ReaderDoneLoading(view);
 
+        ReadingViewAdapters adapters {};
+        adapters.pageChanged = new ReadingViewAdapter::PageChanged(view);
+        adapters.darkMode = darkModeAdapter;
+        adapters.renderVolume = renderVolumeAdapter;
+        adapters.readerDoneLoading = readerDoneLoadingAdapter;
+
+        // Patch QSS
+        QString readingFooterQss = Qss::getContent(QStringLiteral(":/qss/ReadingFooter.qss"));
+        QString patchedQss = Qss::copySelectors(readingFooterQss, QStringLiteral("#caption"), QStringList() << QStringLiteral("#twksLabel") << QStringLiteral("#twksSeparator"));
         if (readingSettings.headerFooterHeightScale < 100) {
             patchedQss = Patch::ReadingView::scaleHeaderFooterHeight(patchedQss, readingSettings.headerFooterHeightScale);
         }
+        patchedQss.replace(QStringLiteral("ReadingFooter"), QStringLiteral("TwWidgetZonesContainer"));
 
-        insertWidgets(pageChangedAdapter, darkModeAdapter, header, patchedQss, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderRight);
-        insertWidgets(pageChangedAdapter, darkModeAdapter, footer, patchedQss, readingSettings.widgetFooterLeft, readingSettings.widgetFooterRight);
+        TwWidgetZonesContainer* headerContainer = emptyHeader ? nullptr : new TwWidgetZonesContainer(readingSettings, patchedQss);
+        TwWidgetZonesContainer* footerContainer = emptyFooter ? nullptr : new TwWidgetZonesContainer(readingSettings, patchedQss);
+
+        if (headerContainer) {
+            // add to topSpacer
+            QHBoxLayout* layout = new QHBoxLayout(topSpacer);
+            layout->setContentsMargins(0, readingSettings.headerSpacerHeight, 0, 0);
+            layout->addWidget(headerContainer, 1);
+        }
+
+        if (footerContainer) {
+            // add to bottomSpacer
+            QHBoxLayout* layout = new QHBoxLayout(bottomSpacer);
+            layout->setContentsMargins(0, 0, 0, readingSettings.footerSpacerHeight);
+            layout->addWidget(footerContainer, 1);
+        }
+
+        QObject::connect(readerDoneLoadingAdapter, &ReadingViewAdapter::ReaderDoneLoading::readerDoneLoading, view, [view, gestureContainer, adapters, readingSettings, headerContainer, footerContainer] {
+            int minimumSideWidth = qMax(10, originalContentsMargins - readingSettings.headerFooterMargins);
+            if (headerContainer) {
+                headerContainer->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetHeaderLeft, readingSettings.widgetHeaderCenter, readingSettings.widgetHeaderRight);
+            }
+
+            if (footerContainer) {
+                footerContainer->setupZones(view, adapters, contentTitle, minimumSideWidth, readingSettings.widgetFooterLeft, readingSettings.widgetFooterCenter, readingSettings.widgetFooterRight);
+            }
+        });
+
+        // Create a QLabel for showing "Brightness" text
+        // Add directly to #gestureContainer
+        QLabel* label = new QLabel(gestureContainer);
+        label->hide();
+        label->setObjectName(QStringLiteral("twksBrightnessLabel"));
+        label->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+        label->move(20, 20);
     }
 
     void setFooterMargin(QWidget* self, int margin) {
@@ -197,7 +128,7 @@ namespace ReadingViewHook {
         originalContentsMargins = margin;
 
         QLayout* layout = self->layout();
-        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setContentsMargins(margin, 0, margin, 0);
     }
 
     namespace DogEarDelegate {
@@ -219,6 +150,81 @@ namespace ReadingViewHook {
             }
 
             AdobeReader_constructor(self, parent, state, imgPath);
+        }
+    }
+
+    namespace BrightnessEventFilterHook {
+        QLabel* findBrightnessLabel(BrightnessEventFilter* self) {
+            // Check cached label
+            QObject* cachedObj = self->property("cachedLabel").value<QObject*>();
+            if (cachedObj) {
+                return static_cast<QLabel*>(cachedObj);
+            }
+
+            // Fint QLabel
+            void* mwc = MainWindowController_sharedInstance();
+            QWidget* view = MainWindowController_currentView(mwc);
+            QWidget* gestureContainer = view->findChild<GestureReceivingContainer*>(QStringLiteral("gestureContainer"), Qt::FindDirectChildrenOnly);
+            if (!gestureContainer) {
+                return nullptr;
+            }
+
+            QLabel* label = gestureContainer->findChild<QLabel*>(QStringLiteral("twksBrightnessLabel"), Qt::FindDirectChildrenOnly);
+            if (label) {
+                // Cache
+                self->setProperty("cachedLabel", QVariant::fromValue((QObject*)label));
+                // Remove cached property when the label is destroyed
+                QObject::connect(label, &QObject::destroyed, self, [self]() {
+                    self->setProperty("cachedLabel", QVariant());
+                });
+            }
+
+            return label;
+        }
+
+        void updateBrightnessHeader(BrightnessEventFilter* self, const QString& text, const QString&) {
+            self->setProperty("pendingText", text);
+
+            QTimer* hideTimer = self->findChild<QTimer*>(QStringLiteral("hideTimer"));
+            if (hideTimer) {
+                hideTimer->stop();
+            } else {
+                hideTimer = new QTimer(self);
+                hideTimer->setObjectName(QStringLiteral("hideTimer"));
+                hideTimer->setSingleShot(true);
+
+                QObject::connect(hideTimer, &QTimer::timeout, self, [self]() {
+                    QLabel* label = findBrightnessLabel(self);
+                    if (label) {
+                        label->hide();
+                    }
+                });
+            }
+
+            QTimer* showTimer = self->findChild<QTimer*>(QStringLiteral("showTimer"));
+            if (!showTimer) {
+                showTimer = new QTimer(self);
+                showTimer->setObjectName(QStringLiteral("showTimer"));
+                showTimer->setSingleShot(true);
+                showTimer->setInterval(25);
+
+                QObject::connect(showTimer, &QTimer::timeout, self, [self, hideTimer]() {
+                    QLabel* label = findBrightnessLabel(self);
+                    if (!label) {
+                        return;
+                    }
+
+                    QString finalText = self->property("pendingText").toString();
+
+                    label->show();
+                    label->setText(finalText);
+                    label->adjustSize();
+
+                    hideTimer->start(2000);
+                });
+            }
+
+            showTimer->start();
         }
     }
 }
