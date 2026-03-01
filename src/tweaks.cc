@@ -109,20 +109,31 @@ struct nh_hook TweaksHook[] = {
         .desc     = "SearchAutoCompleteController::handleSpecialCommands()",
         .optional = true,
     },
+    // Kepub
     {
         .sym      = "_ZN14DogEarDelegateC2EP7QWidgetRK7QString",
         .sym_new  = "hook_DogEarDelegate_constructor",
         .lib      = "libnickel.so.1.0.0",
         .out      = nh_symoutptr(DogEarDelegate_constructor),
-        .desc     = "DogEarDelegate::constructor()",
+        .desc     = "Kepub DogEarDelegate::constructor()",
         .optional = true,
     },
+    // Epub
     {
         .sym      = "_ZN11AdobeReaderC2EP7QWidgetP11PluginStateRK7QString",
         .sym_new  = "hook_AdobeReader_constructor",
         .lib      = "libadobe.so",
         .out      = nh_symoutptr(AdobeReader_constructor),
         .desc     = "Adobe DogEar EPUB",
+        .optional = true,
+    },
+    // CBZ
+    {
+        .sym      = "_ZN14DogEarDelegateC2EP7QWidgetRK7QString",
+        .sym_new  = "hook_DogEarDelegate_constructor",
+        .lib      = "libcb.so",
+        .out      = nh_symoutptr(DogEarDelegate_constructor),
+        .desc     = "CBZ DogEarDelegate::constructor()",
         .optional = true,
     },
     {0}
