@@ -30,14 +30,14 @@ public:
         syncSeparatorVisibility();
 
         // Tell the layout the ideal size (sizeHint) has changed
-        updateGeometry(); 
+        updateGeometry();
         // Update the actual elision for the current width
         update();
     }
 
     QSize sizeHint() const override {
         QFontMetrics fm = fontMetrics();
-        int textWidth = fm.width(fullText); 
+        int textWidth = fm.width(fullText);
         // Add margins/padding to the text width
         int totalWidth = textWidth + (width() - contentsRect().width());
         return QSize(totalWidth, QLabel::sizeHint().height());
